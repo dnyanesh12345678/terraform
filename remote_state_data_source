@@ -1,0 +1,100 @@
+Skip to content
+Chat history
+
+You said:
+what is remote state data source in terraform please explain with simple AWS example
+ChatGPT said:
+Got it 👍 let’s go step by step.
+
+🔹 What is a Remote State Data Source in Terraform?
+Normally, Terraform keeps the state file (terraform.tfstate) locally, which records what resources it has created.
+
+But in real projects, multiple teams or modules might need to share information from one Terraform configuration to another.
+
+To achieve this, Terraform allows remote backends (like S3, Consul, etc.) and provides a terraform_remote_state data source so you can read outputs from another state file.
+
+👉 In short:
+The remote state data source lets you fetch outputs from another Terraform project’s state file and use them in your current project.
+
+🔹 Real-Life Example on AWS
+Imagine this scenario:
+
+You have one Terraform project (networking) that creates a VPC and subnets.
+
+You have another Terraform project (ec2-infra) that needs to create EC2 instances inside that VPC.
+
+Instead of hardcoding the VPC ID and Subnet IDs, you export them as outputs in the networking project and import them using remote state in the ec2-infra project.
+
+1️⃣ Project 1: Networking Project (networking/)
+# networking/main.tf
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
+}
+
+resource "aws_subnet" "subnet1" {
+  vpc_id     = aws_vpc.main.id
+  cidr_block = "10.0.1.0/24"
+}
+
+output "vpc_id" {
+  value = aws_vpc.main.id
+}
+
+output "subnet_id" {
+  value = aws_subnet.subnet1.id
+}
+And store the state remotely in an S3 bucket:
+
+# networking/backend.tf
+terraform {
+  backend "s3" {
+    bucket = "my-terraform-states"
+    key    = "networking/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+2️⃣ Project 2: EC2 Infra Project (ec2-infra/)
+Now we fetch the outputs from the networking project’s remote state.
+
+# ec2-infra/main.tf
+provider "aws" {
+  region = "us-east-1"
+}
+
+# Fetch remote state from networking project
+data "terraform_remote_state" "networking" {
+  backend = "s3"
+  config = {
+    bucket = "my-terraform-states"
+    key    = "networking/terraform.tfstate"
+    region = "us-east-1"
+  }
+}
+
+# Use VPC & Subnet from networking project
+resource "aws_instance" "my_ec2" {
+  ami           = "ami-0c55b159cbfafe1f0" # example Amazon Linux AMI
+  instance_type = "t2.micro"
+  subnet_id     = data.terraform_remote_state.networking.outputs.subnet_id
+}
+🔹 How It Works
+First apply the networking project → it creates VPC + Subnet and stores state in S3.
+
+The EC2 project uses terraform_remote_state to read the outputs (vpc_id, subnet_id) from S3.
+
+Now EC2 can be deployed in the correct subnet without copy-pasting IDs.
+
+✅ Key Benefit: Teams can work independently. One team manages networking, another manages compute, but both share values safely via Terraform remote state.
+
+Do you want me to also show you how this looks in Terraform Cloud/Remote Backend instead of S3 (since both are common in interviews)?
+
+
+
+
+No file chosenNo file chosen
+ChatGPT can make mistakes. Check important info. See Cookie Preferences.
+
